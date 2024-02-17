@@ -1,8 +1,7 @@
-import '@mediapipe/face_detection';
-import '@tensorflow/tfjs-core';
+import { handPoses } from './sampleObjHands';
+import * as tf from '@tensorflow/tfjs-core';
 import '@tensorflow/tfjs-backend-webgl';
-import * as faceDetection from '@tensorflow-models/face-detection';
-import { input } from './sampleObj';
+import * as handPoseDetection from '@tensorflow-models/hand-pose-detection'
 
 // DOM elements
 const videoObj = document.getElementById("videoElement");
@@ -12,8 +11,6 @@ const stopRecordingButton = document.getElementById("stopRecording");
 
 // Variables
 let stream = null;
-let mediaRecorder = null;
-let recordedChunks = [];
 let detector = null;
 
 // Canvas elements
@@ -34,16 +31,16 @@ const constraints = {
 }
 
 // Initialize face detection model
-async function initializeFaceDetector() {
+async function initializeHandPoseDetector() {
     try {
-        const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
+        const model = handPoseDetection.SupportedModels.MediaPipeHands;
         const detectorConfig = { runtime: 'tfjs' };
-        detector = await faceDetection.createDetector(model, detectorConfig);
+        detector = await handPoseDetection.createDetector(model, detectorConfig);
     } catch (error) {
-        console.error('Error initializing face detector:', error);
+        console.error('Error initializing hands detector:', error);
     }
 }
-initializeFaceDetector();
+initializeHandPoseDetector();
 
 // Function to toggle video stream
 async function toggleStream() {
@@ -61,12 +58,7 @@ async function toggleStream() {
     }
 }
 
-// Function to handle video stream
-function handleStream(stream) {
-    videoObj.srcObject = stream;
-}
 
-// Function to stop video stream
 function stopStream() {
     if (stream) {
         const tracks = stream.getTracks();
@@ -75,51 +67,13 @@ function stopStream() {
         stream = null;
         startRecordingButton.disabled = true;
         stopRecordingButton.disabled = true;
-        if (mediaRecorder) {
-            mediaRecorder.stop();
-            mediaRecorder = null;
-        }
     }
 }
 
-// Function to start recording
-function startRecording() {
-    recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = handleDataAvailable;
-    mediaRecorder.start();
-    startRecordingButton.disabled = true;
-    stopRecordingButton.disabled = false;
-}
 
-// Function to handle recorded data
-function handleDataAvailable(event) {
-    recordedChunks.push(event.data);
-}
-
-// Function to stop recording
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-        startRecordingButton.disabled = false;
-        stopRecordingButton.disabled = true;
-        saveRecording();
-    }
-}
-
-// Function to save recording
-function saveRecording() {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'recorded-video.webm';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }, 0);
+// Function to handle video stream
+function handleStream(stream) {
+    videoObj.srcObject = stream;
 }
 
 // Function to process video frames for face detection
@@ -141,42 +95,37 @@ function processVideoFrame() {
 // Function to detect faces in an image
 async function detectorFunc(image) {
     if (!detector) {
-        console.error('Face detector is not initialized.');
+        console.error('Hands detector is not initialized.');
         return;
     }
 
     const estimationConfig = { flipHorizontal: false };
     try {
-        const faces = await detector.estimateFaces(image, estimationConfig);
-        // Adjust detected faces coordinates to match the video feed position and size
+        const handPose = await detector.estimateHands(image, estimationConfig);
         const videoWidth = videoObj.videoWidth;
         const videoHeight = videoObj.videoHeight;
         const scaleFactorX = canvas2d.width / videoWidth;
         const scaleFactorY = canvas2d.height / videoHeight;
-        for (const face of faces) {
-            face.box.xMin *= scaleFactorX;
-            face.box.xMax *= scaleFactorX;
-            face.box.yMin *= scaleFactorY;
-            face.box.yMax *= scaleFactorY;
-        }
-        console.log(faces);
-        // Draw the detected faces on the canvas
-        drawFaces(ctx, faces);
+
+        console.log("Coming From Hand Pose", handPose);
+        drawFaces(ctx, handPose, scaleFactorX, scaleFactorY);
     } catch (error) {
         console.error('Error detecting faces:', error);
     }
 }
 
-// Function to draw detected faces on the canvas
-function drawFaces(ctx, faces) {
-    ctx.clearRect(0, 0, canvas2d.width, canvas2d.height); // Clear the canvas
-    for (const face of faces) {
-        ctx.strokeStyle = "red"; // Set stroke color
-        ctx.lineWidth = 2; // Set line width
-        // Draw the box
-        ctx.beginPath();
-        ctx.rect(face.box.xMin, face.box.yMin, face.box.width / 4, face.box.height / 4);
-        ctx.stroke();
-        ctx.closePath();
-    }
+function drawFaces(ctx, handPoses, scaleFactorX, scaleFactorY) {
+    console.log(scaleFactorX, scaleFactorY);
+    ctx.clearRect(0, 0, canvas2d.width, canvas2d.height);
+    handPoses.forEach(handPose => {
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        handPose.keypoints.forEach(handPoint => {
+            ctx.beginPath();
+            ctx.arc(handPoint.x * scaleFactorX, handPoint.y * scaleFactorY, 1, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.closePath();
+        });
+    });
 }
+
