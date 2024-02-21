@@ -1,8 +1,7 @@
 import '@mediapipe/face_detection';
 import '@tensorflow/tfjs-core';
 import '@tensorflow/tfjs-backend-webgl';
-import * as faceDetection from '@tensorflow-models/face-detection';
-import { input } from './sampleObj';
+import * as bodySegmentation from '@tensorflow-models/body-segmentation';
 
 // DOM elements
 const videoObj = document.getElementById("videoElement");
@@ -12,13 +11,11 @@ const stopRecordingButton = document.getElementById("stopRecording");
 
 // Variables
 let stream = null;
-let mediaRecorder = null;
-let recordedChunks = [];
 let detector = null;
 
 // Canvas elements
 const canvas2d = document.getElementsByTagName("canvas")[0];
-const ctx = canvas2d.getContext("2d");
+// const ctx = canvas2d.getContext("2d");
 
 // Event listeners
 toggleStreamButton.addEventListener("click", toggleStream);
@@ -34,16 +31,16 @@ const constraints = {
 }
 
 // Initialize face detection model
-async function initializeFaceDetector() {
+async function initializeBodySegmentationDetector() {
     try {
-        const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
+        const model = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation;
         const detectorConfig = { runtime: 'tfjs' };
-        detector = await faceDetection.createDetector(model, detectorConfig);
+        detector = await bodySegmentation.createSegmenter(model, detectorConfig);
     } catch (error) {
         console.error('Error initializing face detector:', error);
     }
 }
-initializeFaceDetector();
+initializeBodySegmentationDetector();
 
 // Function to toggle video stream
 async function toggleStream() {
@@ -75,51 +72,7 @@ function stopStream() {
         stream = null;
         startRecordingButton.disabled = true;
         stopRecordingButton.disabled = true;
-        if (mediaRecorder) {
-            mediaRecorder.stop();
-            mediaRecorder = null;
-        }
     }
-}
-
-// Function to start recording
-function startRecording() {
-    recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = handleDataAvailable;
-    mediaRecorder.start();
-    startRecordingButton.disabled = true;
-    stopRecordingButton.disabled = false;
-}
-
-// Function to handle recorded data
-function handleDataAvailable(event) {
-    recordedChunks.push(event.data);
-}
-
-// Function to stop recording
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-        startRecordingButton.disabled = false;
-        stopRecordingButton.disabled = true;
-        saveRecording();
-    }
-}
-
-// Function to save recording
-function saveRecording() {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'recorded-video.webm';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }, 0);
 }
 
 // Function to process video frames for face detection
@@ -141,27 +94,13 @@ function processVideoFrame() {
 // Function to detect faces in an image
 async function detectorFunc(image) {
     if (!detector) {
-        console.error('Face detector is not initialized.');
+        console.error('Segmentation detector is not initialized.');
         return;
     }
-
     const estimationConfig = { flipHorizontal: false };
     try {
-        const faces = await detector.estimateFaces(image, estimationConfig);
-        // Adjust detected faces coordinates to match the video feed position and size
-        const videoWidth = videoObj.videoWidth;
-        const videoHeight = videoObj.videoHeight;
-        const scaleFactorX = canvas2d.width / videoWidth;
-        const scaleFactorY = canvas2d.height / videoHeight;
-        for (const face of faces) {
-            face.box.xMin *= scaleFactorX;
-            face.box.xMax *= scaleFactorX;
-            face.box.yMin *= scaleFactorY;
-            face.box.yMax *= scaleFactorY;
-        }
-        console.log(faces);
-        // Draw the detected faces on the canvas
-        drawFaces(ctx, faces);
+        const segmentation = await detector.segmentPeople(image, estimationConfig);
+        console.log(segmentation);
     } catch (error) {
         console.error('Error detecting faces:', error);
     }
