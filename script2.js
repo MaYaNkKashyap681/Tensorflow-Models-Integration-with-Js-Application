@@ -101,9 +101,28 @@ async function detectorFunc(image) {
     try {
         const segmentation = await detector.segmentPeople(image, estimationConfig);
         console.log(segmentation);
+        drawSegmentation(segmentation); 
     } catch (error) {
         console.error('Error detecting faces:', error);
     }
+}
+
+
+function drawSegmentation(segmentation) {
+    const ctx = canvas2d.getContext('2d');
+    const mask = segmentation.segmentationMask;
+    const width = segmentation.width;
+    const height = segmentation.height;
+
+    // Set canvas dimensions
+    canvas2d.width = width;
+    canvas2d.height = height;
+
+    // Create a new ImageData object
+    const segData = new ImageData(new Uint8ClampedArray(mask), width, height);
+
+    // Draw the segmentation mask onto the canvas
+    ctx.putImageData(segData, 0, 0);
 }
 
 // Function to draw detected faces on the canvas
